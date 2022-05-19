@@ -11,9 +11,8 @@ import java.util.*;
  */
 public class EchoServer  {
     private DatagramSocket socket;
-    private List<String> listQuotes = new ArrayList<String>();
 
-    static ArrayList<Thread> threadList=new ArrayList<>();
+    HashMap<String, int[]> map = new HashMap<String, int[]>();
 
     public EchoServer(int port) throws SocketException {
         socket = new DatagramSocket(port);
@@ -29,6 +28,7 @@ public class EchoServer  {
         int port = Integer.parseInt(args[0]);
 
         try {
+            System.out.println("Server is Listening on "+port +" ...");
             EchoServer server = new EchoServer(port);
             server.protocol();
         }
@@ -42,14 +42,23 @@ public class EchoServer  {
 
     private void protocol() throws IOException {
         while(true){
-            System.out.println("Thread Size:"+threadList.size());
             byte[] buffer = new byte[1024];
             DatagramPacket request = new DatagramPacket(buffer, buffer.length);
             socket.receive(request);
+            InetAddress clientAddress = request.getAddress();
+            int clientPort = request.getPort();
+            String address = clientAddress + ":"+ clientPort;
+            System.out.println("Received Request From: "+ address);
+            if( ! map.containsKey(address))
+            {
+                int[] val = {0, 0};
+                map.put(address, val);
+            }
+
             try{
-                Thread thread=new Thread(new ClientHandler(request,socket));
-                threadList.add(thread);
+                Thread thread=new Thread(new ClientHandler(request,socket,map));
                 thread.start();
+
             }catch (Exception ex){
                 System.out.println("Main Level Exception Occurred");
             }
@@ -60,39 +69,44 @@ public class EchoServer  {
 class ClientHandler implements Runnable{
     private DatagramPacket request;
     private DatagramSocket socket;
-    private int num1,num2;
+
+    private HashMap<String, int[]> map;
+    private int num;
     private byte[] bytes;
-    int length=2;
     byte[] buffer = new byte[1024];
     public void run(){
         try{
             InetAddress clientAddress = request.getAddress();
             int clientPort = request.getPort();
+            String address = clientAddress + ":"+ clientPort;
             bytes=request.getData();
-            if(length==2){
-                num1= Integer.parseInt(new String(bytes).trim());
-                System.out.println("Number 1 : "+num1);
-                String st="Send Me 2nd term";
-                buffer=st.getBytes();
-                length--;
-            }else if(length==1) {
-                num2= Integer.parseInt(new String(bytes).trim());
-                System.out.println("Number 2 : "+num2);
-                int res = num1 + num2;
-                String st = "Sum : " + res;
-                buffer = st.getBytes();
-                length=2;
-                Thread.currentThread().interrupt();
+            String st = "";
+            if (map.get(address)[0] == 0){
+                num= Integer.parseInt(new String(bytes).trim());
+                int[] val = {1, num};
+                map.put(address, val);
+                st="Send Me 2nd term";
             }
+            else{
+                num= Integer.parseInt(new String(bytes).trim());
+                num = map.get(address)[1] + num;
+                int[] val = {0, num};
+                map.put(address, val );
+                st = "Sum : " + map.get(address)[1] ;
+                map.remove(address);
+            }
+            buffer=st.getBytes();
             DatagramPacket response = new DatagramPacket(buffer, buffer.length, clientAddress, clientPort);
             socket.send(response);
+
         }catch (Exception ex){
             System.out.println("An Exception occurred");
         }
 
     }
-    ClientHandler(DatagramPacket request,DatagramSocket socket){
+    ClientHandler(DatagramPacket request,DatagramSocket socket, HashMap<String, int[]> map){
         this.request=request;
         this.socket=socket;
+        this.map=map;
     }
 }
